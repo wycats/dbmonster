@@ -1,0 +1,9 @@
+{
+  "firebase": "dbmonster",
+  "public": "./dist",
+  "ignore": [
+    "firebase.json",
+    "**/.*",
+    "**/node_modules/**"
+  ]
+}
