@@ -1,4 +1,4 @@
-var ROWS = 50;
+var ROWS = 100;
 
 export default function getData() {
   // generate some dummy data
@@ -7,7 +7,7 @@ export default function getData() {
     databases: {}
   };
 
-  for (var i = 1; i <= Math.floor(ROWS * Math.random()) + 1; i++) {
+  for (var i = 1; i <= ROWS; i++) {
     data.databases["cluster" + i] = {
       queries: []
     };
