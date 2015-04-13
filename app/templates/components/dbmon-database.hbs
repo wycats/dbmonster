@@ -1,17 +1,5 @@
-<td class="dbname">
-  {{attrs.db.name}}
-</td>
-<td class="query-count">
-  <span class="{{countClassName}}">
-    {{queries.length}}
-  </span>
-</td>
+{{db-name name=attrs.db.name}}
+{{query-count queries=queries countClassName=countClassName}}
 {{#each topFiveQueries key="key" as |query|}}
-  <td class="Query {{query.className}}">
-    {{query.elapsed}}
-    <div class="popover left">
-      <div class="popover-content">{{query.query}}</div>
-      <div class="arrow"></div>
-    </div>
-  </td>
+  {{db-query query=query}}
 {{/each}}
