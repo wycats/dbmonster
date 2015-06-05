@@ -4,9 +4,9 @@ export default Ember.Component.extend({
   tagName: 'tr',
 
   queries: function() {
-    var samples = this.get('attrs.db').samples;
+    var samples = this.get('attrs.db.value.samples');
     return samples[samples.length - 1].queries;
-  }.property('attrs'),
+  }.property('attrs.db'),
 
   topFiveQueries: function() {
     var queries = this.get('queries');

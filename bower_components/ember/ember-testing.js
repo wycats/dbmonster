@@ -5,24 +5,23 @@
  *            Portions Copyright 2008-2011 Apple Inc. All rights reserved.
  * @license   Licensed under MIT license
  *            See https://raw.github.com/emberjs/ember.js/master/LICENSE
- * @version   1.12.0-beta.1+canary.7d14d2b7
+ * @version   1.13.0-beta.2
  */
 
 (function() {
-var define, requireModule, require, requirejs, Ember;
+var enifed, requireModule, eriuqer, requirejs, Ember;
 var mainContext = this;
 
 (function() {
 
   Ember = this.Ember = this.Ember || {};
   if (typeof Ember === 'undefined') { Ember = {}; };
-  function UNDEFINED() { }
 
   if (typeof Ember.__loader === 'undefined') {
     var registry = {};
     var seen = {};
 
-    define = function(name, deps, callback) {
+    enifed = function(name, deps, callback) {
       var value = { };
 
       if (!callback) {
@@ -36,36 +35,44 @@ var mainContext = this;
         registry[name] = value;
     };
 
-    requirejs = require = requireModule = function(name) {
-      var s = seen[name];
+    requirejs = eriuqer = requireModule = function(name) {
+      return internalRequire(name, null);
+    }
 
-      if (s !== undefined) { return seen[name]; }
-      if (s === UNDEFINED) { return undefined;  }
+    function internalRequire(name, referrerName) {
+      var exports = seen[name];
 
-      seen[name] = {};
+      if (exports !== undefined) {
+        return exports;
+      }
+
+      exports = seen[name] = {};
 
       if (!registry[name]) {
-        throw new Error('Could not find module ' + name);
+        if (referrerName) {
+          throw new Error('Could not find module ' + name + ' required by: ' + referrerName);
+        } else {
+          throw new Error('Could not find module ' + name);
+        }
       }
 
       var mod = registry[name];
       var deps = mod.deps;
       var callback = mod.callback;
       var reified = [];
-      var exports;
       var length = deps.length;
 
       for (var i=0; i<length; i++) {
         if (deps[i] === 'exports') {
-          reified.push(exports = {});
+          reified.push(exports);
         } else {
-          reified.push(requireModule(resolve(deps[i], name)));
+          reified.push(internalRequire(resolve(deps[i], name), name));
         }
       }
 
-      var value = length === 0 ? callback.call(this) : callback.apply(this, reified);
+      callback.apply(this, reified);
 
-      return seen[name] = exports || (value === undefined ? UNDEFINED : value);
+      return exports;
     };
 
     function resolve(child, name) {
@@ -93,36 +100,50 @@ var mainContext = this;
     requirejs._eak_seen = registry;
 
     Ember.__loader = {
-      define: define,
-      require: require,
+      define: enifed,
+      require: eriuqer,
       registry: registry
     };
   } else {
-    define = Ember.__loader.define;
-    requirejs = require = requireModule = Ember.__loader.require;
+    enifed = Ember.__loader.define;
+    requirejs = eriuqer = requireModule = Ember.__loader.require;
   }
 })();
 
-define('ember-debug', ['exports', 'ember-metal/core', 'ember-metal/error', 'ember-metal/logger', 'ember-metal/environment'], function (exports, Ember, EmberError, Logger, environment) {
+enifed('ember-debug', ['exports', 'ember-metal/core', 'ember-metal/error', 'ember-metal/logger', 'ember-metal/environment'], function (exports, Ember, EmberError, Logger, environment) {
 
   'use strict';
 
   exports._warnIfUsingStrippedFeatureFlags = _warnIfUsingStrippedFeatureFlags;
 
+  function isPlainFunction(test) {
+    return typeof test === "function" && test.PrototypeMixin === undefined;
+  }
+
   /**
-    Will call `Ember.warn()` if ENABLE_ALL_FEATURES, ENABLE_OPTIONAL_FEATURES, or
-    any specific FEATURES flag is truthy.
+    Define an assertion that will throw an exception if the condition is not
+    met. Ember build tools will remove any calls to `Ember.assert()` when
+    doing a production build. Example:
 
-    This method is called automatically in debug canary builds.
+    ```javascript
+    // Test for truthiness
+    Ember.assert('Must pass a valid object', obj);
 
-    @private
-    @method _warnIfUsingStrippedFeatureFlags
-    @return {void}
+    // Fail unconditionally
+    Ember.assert('This code path should never be run');
+    ```
+
+    @method assert
+    @param {String} desc A description of the assertion. This will become
+      the text of the Error thrown if the assertion fails.
+    @param {Boolean|Function} test Must be truthy for the assertion to pass. If
+      falsy, an exception will be thrown. If this is a function, it will be executed and
+      its return value will be used as condition.
   */
   Ember['default'].assert = function (desc, test) {
     var throwAssertion;
 
-    if (Ember['default'].typeOf(test) === "function") {
+    if (isPlainFunction(test)) {
       throwAssertion = !test();
     } else {
       throwAssertion = !test;
@@ -173,15 +194,16 @@ define('ember-debug', ['exports', 'ember-metal/core', 'ember-metal/error', 'embe
 
     @method deprecate
     @param {String} message A description of the deprecation.
-    @param {Boolean} test An optional boolean. If falsy, the deprecation
-      will be displayed.
+    @param {Boolean|Function} test An optional boolean. If falsy, the deprecation
+      will be displayed. If this is a function, it will be executed and its return
+      value will be used as condition.
     @param {Object} options An optional object that can be used to pass
       in a `url` to the transition guide on the emberjs.com website.
   */
   Ember['default'].deprecate = function (message, test, options) {
     var noDeprecation;
 
-    if (typeof test === "function") {
+    if (isPlainFunction(test)) {
       noDeprecation = test();
     } else {
       noDeprecation = test;
@@ -277,6 +299,17 @@ define('ember-debug', ['exports', 'ember-metal/core', 'ember-metal/error', 'embe
   Ember['default'].runInDebug = function (func) {
     func();
   };
+
+  /**
+    Will call `Ember.warn()` if ENABLE_ALL_FEATURES, ENABLE_OPTIONAL_FEATURES, or
+    any specific FEATURES flag is truthy.
+
+    This method is called automatically in debug canary builds.
+
+    @private
+    @method _warnIfUsingStrippedFeatureFlags
+    @return {void}
+  */
   function _warnIfUsingStrippedFeatureFlags(FEATURES, featuresWereStripped) {
     if (featuresWereStripped) {
       Ember['default'].warn("Ember.ENV.ENABLE_ALL_FEATURES is only available in canary builds.", !Ember['default'].ENV.ENABLE_ALL_FEATURES);
@@ -295,15 +328,12 @@ define('ember-debug', ['exports', 'ember-metal/core', 'ember-metal/error', 'embe
     Ember['default'].FEATURES["features-stripped-test"] = true;
     var featuresWereStripped = true;
 
-    if (Ember['default'].FEATURES.isEnabled("features-stripped-test")) {
-      featuresWereStripped = false;
-    }
-
+    
     delete Ember['default'].FEATURES["features-stripped-test"];
     _warnIfUsingStrippedFeatureFlags(Ember['default'].ENV.FEATURES, featuresWereStripped);
 
     // Inform the developer about the Ember Inspector if not installed.
-    var isFirefox = typeof InstallTrigger !== "undefined";
+    var isFirefox = environment['default'].isFirefox;
     var isChrome = environment['default'].isChrome;
 
     if (typeof window !== "undefined" && (isFirefox || isChrome) && window.addEventListener) {
@@ -339,7 +369,7 @@ define('ember-debug', ['exports', 'ember-metal/core', 'ember-metal/error', 'embe
   exports.runningNonEmberDebugJS = runningNonEmberDebugJS;
 
 });
-define('ember-testing', ['ember-metal/core', 'ember-testing/initializers', 'ember-testing/support', 'ember-testing/setup_for_testing', 'ember-testing/test', 'ember-testing/adapters/adapter', 'ember-testing/adapters/qunit', 'ember-testing/helpers'], function (Ember, __dep1__, __dep2__, setupForTesting, Test, Adapter, QUnitAdapter) {
+enifed('ember-testing', ['ember-metal/core', 'ember-testing/initializers', 'ember-testing/support', 'ember-testing/setup_for_testing', 'ember-testing/test', 'ember-testing/adapters/adapter', 'ember-testing/adapters/qunit', 'ember-testing/helpers'], function (Ember, __dep1__, __dep2__, setupForTesting, Test, Adapter, QUnitAdapter) {
 
   'use strict';
 
@@ -349,7 +379,7 @@ define('ember-testing', ['ember-metal/core', 'ember-testing/initializers', 'embe
   Ember['default'].setupForTesting = setupForTesting['default'];
 
 });
-define('ember-testing/adapters/adapter', ['exports', 'ember-runtime/system/object'], function (exports, EmberObject) {
+enifed('ember-testing/adapters/adapter', ['exports', 'ember-runtime/system/object'], function (exports, EmberObject) {
 
   'use strict';
 
@@ -408,7 +438,7 @@ define('ember-testing/adapters/adapter', ['exports', 'ember-runtime/system/objec
   exports['default'] = Adapter;
 
 });
-define('ember-testing/adapters/qunit', ['exports', 'ember-testing/adapters/adapter', 'ember-metal/utils'], function (exports, Adapter, utils) {
+enifed('ember-testing/adapters/qunit', ['exports', 'ember-testing/adapters/adapter', 'ember-metal/utils'], function (exports, Adapter, utils) {
 
   'use strict';
 
@@ -425,13 +455,12 @@ define('ember-testing/adapters/qunit', ['exports', 'ember-testing/adapters/adapt
   });
 
 });
-define('ember-testing/helpers', ['ember-metal/core', 'ember-metal/property_get', 'ember-metal/error', 'ember-metal/run_loop', 'ember-views/system/jquery', 'ember-testing/test'], function (Ember, property_get, EmberError, run, jQuery, Test) {
+enifed('ember-testing/helpers', ['ember-metal/core', 'ember-metal/property_get', 'ember-metal/error', 'ember-metal/run_loop', 'ember-views/system/jquery', 'ember-testing/test', 'ember-runtime/ext/rsvp'], function (Ember, property_get, EmberError, run, jQuery, Test, RSVP) {
 
   'use strict';
 
   var helper = Test['default'].registerHelper;
   var asyncHelper = Test['default'].registerAsyncHelper;
-  var countAsync = 0;
 
   function currentRouteName(app) {
     var appController = app.__container__.lookup("controller:application");
@@ -476,7 +505,9 @@ define('ember-testing/helpers', ['ember-metal/core', 'ember-metal/property_get',
 
   function visit(app, url) {
     var router = app.__container__.lookup("router:main");
-    router.location.setURL(url);
+    app.boot().then(function () {
+      router.location.setURL(url);
+    });
 
     if (app._readinessDeferrals > 0) {
       router["initialURL"] = url;
@@ -618,12 +649,7 @@ define('ember-testing/helpers', ['ember-metal/core', 'ember-metal/property_get',
   }
 
   function wait(app, value) {
-    return Test['default'].promise(function (resolve) {
-      // If this is the first async promise, kick off the async test
-      if (++countAsync === 1) {
-        Test['default'].adapter.asyncStart();
-      }
-
+    return new RSVP['default'].Promise(function (resolve) {
       // Every 10ms, poll for the async thing to have finished
       var watcher = setInterval(function () {
         var router = app.__container__.lookup("router:main");
@@ -652,11 +678,6 @@ define('ember-testing/helpers', ['ember-metal/core', 'ember-metal/property_get',
         }
         // Stop polling
         clearInterval(watcher);
-
-        // If this is the last async promise, end the async test
-        if (--countAsync === 0) {
-          Test['default'].adapter.asyncEnd();
-        }
 
         // Synchronously resolve the promise
         run['default'](null, resolve, value);
@@ -701,44 +722,7 @@ define('ember-testing/helpers', ['ember-metal/core', 'ember-metal/property_get',
   */
   asyncHelper("click", click);
 
-  if (Ember['default'].FEATURES.isEnabled("ember-testing-checkbox-helpers")) {
     /**
-    * Checks a checkbox. Ensures the presence of the `checked` attribute
-    *
-    * Example:
-    *
-    * ```javascript
-    * check('#remember-me').then(function() {
-    *   // assert something
-    * });
-    * ```
-    *
-    * @method check
-    * @param {String} selector jQuery selector finding an `input[type="checkbox"]`
-    * element on the DOM to check
-    * @return {RSVP.Promise}
-    */
-    asyncHelper("check", check);
-
-    /**
-    * Unchecks a checkbox. Ensures the absence of the `checked` attribute
-    *
-    * Example:
-    *
-    * ```javascript
-    * uncheck('#remember-me').then(function() {
-    *   // assert something
-    * });
-    * ```
-    *
-    * @method check
-    * @param {String} selector jQuery selector finding an `input[type="checkbox"]`
-    * element on the DOM to uncheck
-    * @return {RSVP.Promise}
-    */
-    asyncHelper("uncheck", uncheck);
-  }
-  /**
   * Simulates a key event, e.g. `keypress`, `keydown`, `keyup` with the desired keyCode
   *
   * Example:
@@ -939,13 +923,13 @@ define('ember-testing/helpers', ['ember-metal/core', 'ember-metal/property_get',
   asyncHelper("triggerEvent", triggerEvent);
 
 });
-define('ember-testing/initializers', ['ember-runtime/system/lazy_load'], function (lazy_load) {
+enifed('ember-testing/initializers', ['ember-runtime/system/lazy_load'], function (lazy_load) {
 
   'use strict';
 
-  var name = "deferReadiness in `testing` mode";
+  var name = 'deferReadiness in `testing` mode';
 
-  lazy_load.onLoad("Ember.Application", function (Application) {
+  lazy_load.onLoad('Ember.Application', function (Application) {
     if (!Application.initializers[name]) {
       Application.initializer({
         name: name,
@@ -960,23 +944,11 @@ define('ember-testing/initializers', ['ember-runtime/system/lazy_load'], functio
   });
 
 });
-define('ember-testing/setup_for_testing', ['exports', 'ember-metal/core', 'ember-testing/adapters/qunit', 'ember-views/system/jquery'], function (exports, Ember, QUnitAdapter, jQuery) {
+enifed('ember-testing/setup_for_testing', ['exports', 'ember-metal/core', 'ember-testing/adapters/qunit', 'ember-views/system/jquery'], function (exports, Ember, QUnitAdapter, jQuery) {
 
   'use strict';
 
 
-
-  /**
-    Sets Ember up for testing. This is useful to perform
-    basic setup steps in order to unit test.
-
-    Use `App.setupForTesting` to perform integration tests (full
-    application testing).
-
-    @method setupForTesting
-    @namespace Ember
-    @since 1.5.0
-  */
   exports['default'] = setupForTesting;
   var Test, requests;
 
@@ -993,6 +965,18 @@ define('ember-testing/setup_for_testing', ['exports', 'ember-metal/core', 'ember
     }
     Test.pendingAjaxRequests = requests.length;
   }
+
+  /**
+    Sets Ember up for testing. This is useful to perform
+    basic setup steps in order to unit test.
+
+    Use `App.setupForTesting` to perform integration tests (full
+    application testing).
+
+    @method setupForTesting
+    @namespace Ember
+    @since 1.5.0
+  */
   function setupForTesting() {
     if (!Test) {
       Test = requireModule("ember-testing/test")["default"];
@@ -1015,7 +999,7 @@ define('ember-testing/setup_for_testing', ['exports', 'ember-metal/core', 'ember
   }
 
 });
-define('ember-testing/support', ['ember-metal/core', 'ember-views/system/jquery', 'ember-metal/environment'], function (Ember, jQuery, environment) {
+enifed('ember-testing/support', ['ember-metal/core', 'ember-views/system/jquery', 'ember-metal/environment'], function (Ember, jQuery, environment) {
 
   'use strict';
 
@@ -1064,11 +1048,10 @@ define('ember-testing/support', ['ember-metal/core', 'ember-views/system/jquery'
   }
 
 });
-define('ember-testing/test', ['exports', 'ember-metal/core', 'ember-metal/run_loop', 'ember-metal/platform/create', 'ember-runtime/ext/rsvp', 'ember-testing/setup_for_testing', 'ember-application/system/application'], function (exports, Ember, emberRun, create, RSVP, setupForTesting, EmberApplication) {
+enifed('ember-testing/test', ['exports', 'ember-metal/core', 'ember-metal/run_loop', 'ember-metal/platform/create', 'ember-runtime/ext/rsvp', 'ember-testing/setup_for_testing', 'ember-application/system/application'], function (exports, Ember, emberRun, create, RSVP, setupForTesting, EmberApplication) {
 
   'use strict';
 
-  var slice = [].slice;
   var helpers = {};
   var injectHelpersCallbacks = [];
 
@@ -1207,9 +1190,11 @@ define('ember-testing/test', ['exports', 'ember-metal/core', 'ember-metal/run_lo
        @public
       @method promise
       @param {Function} resolver The function used to resolve the promise.
+      @param {String} label An optional string for identifying the promise.
     */
-    promise: function (resolver) {
-      return new Test.Promise(resolver);
+    promise: function (resolver, label) {
+      var fullLabel = "Ember.Test.promise: " + (label || "<Unknown Promise>");
+      return new Test.Promise(resolver, fullLabel);
     },
 
     /**
@@ -1303,8 +1288,11 @@ define('ember-testing/test', ['exports', 'ember-metal/core', 'ember-metal/run_lo
     var meta = helpers[name].meta;
 
     return function () {
-      var args = slice.call(arguments);
-      var lastPromise = Test.lastPromise;
+      for (var _len = arguments.length, args = Array(_len), _key = 0; _key < _len; _key++) {
+        args[_key] = arguments[_key];
+      }
+
+      var lastPromise;
 
       args.unshift(app);
 
@@ -1315,35 +1303,28 @@ define('ember-testing/test', ['exports', 'ember-metal/core', 'ember-metal/run_lo
         return fn.apply(app, args);
       }
 
-      if (!lastPromise) {
-        // It's the first async helper in current context
-        lastPromise = fn.apply(app, args);
-      } else {
-        // wait for last helper's promise to resolve and then
-        // execute. To be safe, we need to tell the adapter we're going
-        // asynchronous here, because fn may not be invoked before we
-        // return.
-        Test.adapter.asyncStart();
-        run(function () {
-          lastPromise = Test.resolve(lastPromise).then(function () {
-            try {
-              return fn.apply(app, args);
-            } finally {
-              Test.adapter.asyncEnd();
-            }
-          });
-        });
-      }
+      lastPromise = run(function () {
+        return Test.resolve(Test.lastPromise);
+      });
 
-      return lastPromise;
+      // wait for last helper's promise to resolve and then
+      // execute. To be safe, we need to tell the adapter we're going
+      // asynchronous here, because fn may not be invoked before we
+      // return.
+      Test.adapter.asyncStart();
+      return lastPromise.then(function () {
+        return fn.apply(app, args);
+      })["finally"](function () {
+        Test.adapter.asyncEnd();
+      });
     };
   }
 
   function run(fn) {
     if (!emberRun['default'].currentRunLoop) {
-      emberRun['default'](fn);
+      return emberRun['default'](fn);
     } else {
-      fn();
+      return fn();
     }
   }
 
@@ -1476,7 +1457,10 @@ define('ember-testing/test', ['exports', 'ember-metal/core', 'ember-metal/run_lo
   // of helper chaining
   function protoWrap(proto, name, callback, isAsync) {
     proto[name] = function () {
-      var args = arguments;
+      for (var _len2 = arguments.length, args = Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
+        args[_key2] = arguments[_key2];
+      }
+
       if (isAsync) {
         return callback.apply(this, args);
       } else {
@@ -1494,6 +1478,7 @@ define('ember-testing/test', ['exports', 'ember-metal/core', 'ember-metal/run_lo
 
   Test.Promise.prototype = create['default'](RSVP['default'].Promise.prototype);
   Test.Promise.prototype.constructor = Test.Promise;
+  Test.Promise.resolve = Test.resolve;
 
   // Patch `then` to isolate async methods
   // specifically `Ember.Test.lastPromise`
@@ -1510,7 +1495,6 @@ define('ember-testing/test', ['exports', 'ember-metal/core', 'ember-metal/run_lo
   // 1. Set `Ember.Test.lastPromise` to null
   // 2. Invoke method
   // 3. Return the last promise created during method
-  // 4. Restore `Ember.Test.lastPromise` to original value
   function isolate(fn, val) {
     var value, lastPromise;
 
@@ -1520,6 +1504,7 @@ define('ember-testing/test', ['exports', 'ember-metal/core', 'ember-metal/run_lo
     value = fn(val);
 
     lastPromise = Test.lastPromise;
+    Test.lastPromise = null;
 
     // If the method returned a promise
     // return that promise. If not,
@@ -1527,189 +1512,17 @@ define('ember-testing/test', ['exports', 'ember-metal/core', 'ember-metal/run_lo
     if (value && value instanceof Test.Promise || !lastPromise) {
       return value;
     } else {
-      run(function () {
-        lastPromise = Test.resolve(lastPromise).then(function () {
+      return run(function () {
+        return Test.resolve(lastPromise).then(function () {
           return value;
         });
       });
-      return lastPromise;
     }
   }
 
   exports['default'] = Test;
 
 });
-define("htmlbars-test-helpers",
-  ["../simple-html-tokenizer","../htmlbars-util/array-utils","exports"],
-  function(__dependency1__, __dependency2__, __exports__) {
-    "use strict";
-    var tokenize = __dependency1__.tokenize;
-    var forEach = __dependency2__.forEach;
-
-    function equalInnerHTML(fragment, html) {
-      var actualHTML = normalizeInnerHTML(fragment.innerHTML);
-      QUnit.push(actualHTML === html, actualHTML, html);
-    }
-
-    __exports__.equalInnerHTML = equalInnerHTML;function equalHTML(node, html) {
-      var fragment;
-      if (!node.nodeType && node.length) {
-        fragment = document.createDocumentFragment();
-        while (node[0]) {
-          fragment.appendChild(node[0]);
-        }
-      } else {
-        fragment = node;
-      }
-
-      var div = document.createElement("div");
-      div.appendChild(fragment.cloneNode(true));
-
-      equalInnerHTML(div, html);
-    }
-
-    __exports__.equalHTML = equalHTML;// IE8 removes comments and does other unspeakable things with innerHTML
-    var ie8GenerateTokensNeeded = (function() {
-      var div = document.createElement("div");
-      div.innerHTML = "<!-- foobar -->";
-      return div.innerHTML === "";
-    })();
-
-    function generateTokens(fragmentOrHtml) {
-      var div = document.createElement("div");
-      if (typeof fragmentOrHtml === 'string') {
-        div.innerHTML = fragmentOrHtml;
-      } else {
-        div.appendChild(fragmentOrHtml.cloneNode(true));
-      }
-      if (ie8GenerateTokensNeeded) {
-        // IE8 drops comments and does other unspeakable things on `innerHTML`.
-        // So in that case we do it to both the expected and actual so that they match.
-        var div2 = document.createElement("div");
-        div2.innerHTML = div.innerHTML;
-        div.innerHTML = div2.innerHTML;
-      }
-      return { tokens: tokenize(div.innerHTML), html: div.innerHTML };
-    }
-
-    function equalTokens(fragment, html, message) {
-      if (fragment.fragment) { fragment = fragment.fragment; }
-      if (html.fragment) { html = html.fragment; }
-
-      var fragTokens = generateTokens(fragment);
-      var htmlTokens = generateTokens(html);
-
-      function normalizeTokens(token) {
-        if (token.type === 'StartTag') {
-          token.attributes = token.attributes.sort(function(a,b){
-            if (a.name > b.name) {
-              return 1;
-            }
-            if (a.name < b.name) {
-              return -1;
-            }
-            return 0;
-          });
-        }
-      }
-
-      forEach(fragTokens.tokens, normalizeTokens);
-      forEach(htmlTokens.tokens, normalizeTokens);
-
-      var msg = "Expected: " + html + "; Actual: " + fragTokens.html;
-
-      if (message) { msg += " (" + message + ")"; }
-
-      deepEqual(fragTokens.tokens, htmlTokens.tokens, msg);
-    }
-
-    __exports__.equalTokens = equalTokens;// detect weird IE8 html strings
-    var ie8InnerHTMLTestElement = document.createElement('div');
-    ie8InnerHTMLTestElement.setAttribute('id', 'womp');
-    var ie8InnerHTML = (ie8InnerHTMLTestElement.outerHTML.indexOf('id=womp') > -1);
-
-    // detect side-effects of cloning svg elements in IE9-11
-    var ieSVGInnerHTML = (function () {
-      if (!document.createElementNS) {
-        return false;
-      }
-      var div = document.createElement('div');
-      var node = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      div.appendChild(node);
-      var clone = div.cloneNode(true);
-      return clone.innerHTML === '<svg xmlns="http://www.w3.org/2000/svg" />';
-    })();
-
-    function normalizeInnerHTML(actualHTML) {
-      if (ie8InnerHTML) {
-        // drop newlines in IE8
-        actualHTML = actualHTML.replace(/\r\n/gm, '');
-        // downcase ALLCAPS tags in IE8
-        actualHTML = actualHTML.replace(/<\/?[A-Z\-]+/gi, function(tag){
-          return tag.toLowerCase();
-        });
-        // quote ids in IE8
-        actualHTML = actualHTML.replace(/id=([^ >]+)/gi, function(match, id){
-          return 'id="'+id+'"';
-        });
-        // IE8 adds ':' to some tags
-        // <keygen> becomes <:keygen>
-        actualHTML = actualHTML.replace(/<(\/?):([^ >]+)/gi, function(match, slash, tag){
-          return '<'+slash+tag;
-        });
-
-        // Normalize the style attribute
-        actualHTML = actualHTML.replace(/style="(.+?)"/gi, function(match, val){
-          return 'style="'+val.toLowerCase()+';"';
-        });
-
-      }
-      if (ieSVGInnerHTML) {
-        // Replace `<svg xmlns="http://www.w3.org/2000/svg" height="50%" />` with `<svg height="50%"></svg>`, etc.
-        // drop namespace attribute
-        actualHTML = actualHTML.replace(/ xmlns="[^"]+"/, '');
-        // replace self-closing elements
-        actualHTML = actualHTML.replace(/<([^ >]+) [^\/>]*\/>/gi, function(tag, tagName) {
-          return tag.slice(0, tag.length - 3) + '></' + tagName + '>';
-        });
-      }
-
-      return actualHTML;
-    }
-
-    __exports__.normalizeInnerHTML = normalizeInnerHTML;// detect weird IE8 checked element string
-    var checkedInput = document.createElement('input');
-    checkedInput.setAttribute('checked', 'checked');
-    var checkedInputString = checkedInput.outerHTML;
-    function isCheckedInputHTML(element) {
-      equal(element.outerHTML, checkedInputString);
-    }
-
-    __exports__.isCheckedInputHTML = isCheckedInputHTML;// check which property has the node's text content
-    var textProperty = document.createElement('div').textContent === undefined ? 'innerText' : 'textContent';
-    function getTextContent(el) {
-      // textNode
-      if (el.nodeType === 3) {
-        return el.nodeValue;
-      } else {
-        return el[textProperty];
-      }
-    }
-
-    __exports__.getTextContent = getTextContent;// IE8 does not have Object.create, so use a polyfill if needed.
-    // Polyfill based on Mozilla's (MDN)
-    function createObject(obj) {
-      if (typeof Object.create === 'function') {
-        return Object.create(obj);
-      } else {
-        var Temp = function() {};
-        Temp.prototype = obj;
-        return new Temp();
-      }
-    }
-
-    __exports__.createObject = createObject;
-  });
 requireModule("ember-testing");
 
 })();
