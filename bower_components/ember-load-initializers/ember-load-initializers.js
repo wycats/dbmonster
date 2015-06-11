@@ -6,15 +6,32 @@ define("ember/load-initializers",
 
     return {
       'default': function(app, prefix) {
-        var initializersRegExp = new RegExp('^' + prefix + '/initializers');
+        var regex = new RegExp('^' + prefix + '\/((?:instance-)?initializers)\/');
 
-        Ember.keys(requirejs._eak_seen).filter(function(key) {
-          return initializersRegExp.test(key);
-        }).forEach(function(moduleName) {
-          var module = require(moduleName, null, null, true);
-          if (!module) { throw new Error(moduleName + ' must export an initializer.'); }
-          app.initializer(module['default']);
-        });
+        Ember.keys(requirejs._eak_seen).map(function (moduleName) {
+            return {
+              moduleName: moduleName,
+              matches: regex.exec(moduleName)
+            };
+          })
+          .filter(function(dep) {
+            return dep.matches && dep.matches.length === 2;
+          })
+          .forEach(function(dep) {
+            var moduleName = dep.moduleName;
+
+            var module = require(moduleName, null, null, true);
+            if (!module) { throw new Error(moduleName + ' must export an initializer.'); }
+
+            var initializerType = Ember.String.camelize(dep.matches[1].substring(0, dep.matches[1].length - 1));
+            var initializer = module['default'];
+            if (!initializer.name) {
+              var initializerName = moduleName.match(/[^\/]+\/?$/)[0];
+              initializer.name = initializerName;
+            }
+
+            app[initializerType](initializer);
+          });
       }
     }
   }
