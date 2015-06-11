@@ -15,3 +15,6 @@
   width: 100%;
   display: block;
 }
+.elapsed-long {
+  color:red;
+}

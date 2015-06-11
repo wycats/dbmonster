@@ -1,0 +1,10 @@
+{{db-elapsed time=attrs.query.elapsed}}
+{{! We could probably thrash the dom less if we just killed the `popover`
+     class on this component when there was no query, but right now
+     classNameBindings aren't working how I expect them to be working. (they're
+     always false, I'm assuming it's something that isn't working with glimmer
+     yet).
+}}
+{{#if attrs.query.query}}
+  {{db-popover query=attrs.query}}
+{{/if}}
