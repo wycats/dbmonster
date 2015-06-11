@@ -1,8 +1,6 @@
 import Ember from 'ember';
 import getData from '../lib/get-data';
 
-var TIMEOUT = 0;
-
 export default Ember.Route.extend({
   model: function() {
     return {
@@ -43,6 +41,6 @@ export default Ember.Route.extend({
 
     Ember.set(model, 'databaseArray', databaseArray);
 
-    setTimeout(this.loadSamples.bind(this), TIMEOUT);
+    requestAnimationFrame(Ember.run.bind(this, this.loadSamples));
   }
 });
